@@ -1,3 +1,11 @@
+//
+//  SessionManager.swift
+//  Study Master
+//
+//  Created by Finley Room on 7/14/25.
+//
+import SwiftUI
+
 final class SessionManager: ObservableObject {
     @Published var isLoggedIn: Bool
 
