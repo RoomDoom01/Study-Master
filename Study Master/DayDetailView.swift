@@ -17,54 +17,58 @@ struct DayDetailView: View {
         formatter.dateStyle = .full
         return formatter.string(from: date)
     }
-    
+
+    @StateObject private var viewModel = CanvasViewModel()
+
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    SectionView(
-                        title: "📅 Classes",
-                        items: [
-                            "Math - 10:00 AM",
-                            "Chemistry - 1:00 PM",
-                            "CS Lecture - 3:30 PM"
-                        ]
-                    )
-                    
-                    SectionView(
-                        title: "📝 Assignments Due",
-                        items: [
-                            "Math Homework 4",
-                            "CS Lab Report",
-                            "Read Ch. 5 of Chemistry Textbook"
-                        ]
-                    )
-                    
-                    SectionView(
-                        title: "🧪 Tests",
-                        items: [
-                            "CS Quiz 3"
-                        ]
-                    )
-                    
-                    SectionView(
-                        title: "📚 Study Plan",
-                        items: [
-                            "Revise CS Lecture Notes",
-                            "Work on Math Problem Set",
-                            "Flashcards: Chemistry Reactions"
-                        ]
-                    )
+                if viewModel.isLoggedIn {
+                    if viewModel.isLoading {
+                        ProgressView("Loading assignments...")
+                            .padding()
+                    } else if viewModel.assignments.isEmpty {
+                        Text("No upcoming assignments 🎉")
+                            .foregroundColor(.gray)
+                            .padding()
+                    } else {
+                        List {
+                            if !viewModel.upcomingAssignments.isEmpty {
+                                Section(header: Text("📝 Assignments Due")) {
+                                    ForEach(viewModel.upcomingAssignments) { assignment in
+                                        AssignmentRow(assignment: assignment)
+                                    }
+                                }
+                            }
+
+                            if !viewModel.upcomingQuizzes.isEmpty {
+                                Section(header: Text("🧪 Tests & Quizzes")) {
+                                    ForEach(viewModel.upcomingQuizzes) { quiz in
+                                        AssignmentRow(assignment: quiz)
+                                    }
+                                }
+                            }
+                        }
+                        .listStyle(InsetGroupedListStyle())
+                    }
                 }
-                .padding()
+                //Show all other events
+                
             }
             .navigationTitle(formattedDate)
             #if os(IOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
+            .onOpenURL { url in
+                viewModel.handleOAuthCallback(url: url)
+            }
+            .onAppear {
+                viewModel.checkLoginStatus()
+            }
         }
     }
 }
+
 
 struct SectionView: View {
     let title: String
