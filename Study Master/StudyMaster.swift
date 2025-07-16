@@ -14,21 +14,23 @@ struct ContentView: View {
                 }
                 .tag(0)
             
-            // Calendar Tab (Active by default)
-            CalendarView()
-                .tabItem {
-                    Image(systemName: "calendar")
-                    Text("Calendar")
-                }
-                .tag(1)
-            
             // Focus Mode Tab
             FocusModeView()
                 .tabItem {
                     Image(systemName: "lock.shield")
                     Text("Focus Mode")
                 }
+                .tag(1)
+            
+            // Calendar Tab (Active by default)
+            CalendarView()
+                .tabItem {
+                    Image(systemName: "calendar")
+                    Text("Calendar")
+                }
                 .tag(2)
+            
+            
         }
         .accentColor(.blue)
     }
