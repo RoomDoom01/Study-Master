@@ -8,67 +8,6 @@
 import SwiftUI
 
 
-class Event {
-    var title: String
-    var description: String
-    var date: Date
-    var time: Date
-
-    init(title: String, description: String, date: Date, time: Date) {
-        self.title = title
-        self.description = description
-        self.date = date
-        self.time = time
-    }
-}
-
-class CanvasEvent: Event {
-    var courseName: String  // Represents the class object
-
-    init(title: String, description: String, date: Date, time: Date, courseName: String) {
-        self.courseName = courseName
-        super.init(title: title, description: description, date: date, time: time)
-    }
-}
-
-class Assignment: CanvasEvent {
-    var groupMembers: [String]
-
-    init(title: String,
-         description: String,
-         date: Date,
-         time: Date,
-         courseName: String,
-         groupMembers: [String]) {
-        self.groupMembers = groupMembers
-        super.init(title: title, description: description, date: date, time: time, courseName: courseName)
-    }
-}
-
-
-
-
-/*
-Breakdown for structure of event storage
-    Month
-        Assignments (Title, Class object, description, due date, time, group members)
-        Tests (Title, Class object, date, time)
-        Manual/study event (Title, date, time, description)
-
-assignments and tests will be pulled from canvas,
-manual event will be created by user, study event created by app
-Event class structure:
-    Title, description, date, time
-
-    Canvas event subclass: (Tests will use this)
-        Class object
-
-        Assignment subclass:
-            group members
-            
-
- */
-
 struct CalendarView: View {
     @State private var currentDate = Date()
     @State private var selectedDate: IdentifiableDate? = nil
@@ -127,7 +66,7 @@ struct CalendarView: View {
                             .fontWeight(.semibold)
                         
                         Spacer()
-                        /*
+                        
                         Button(action: addEvent){
                             Text("Add Calendar Event")
                                 .font(.title2)
@@ -135,8 +74,8 @@ struct CalendarView: View {
                                 .padding()
                                 .background(.secondary)
                                 .foregroundColor(.primary)
-                        }
-                        */                    
+                        }  
+
                         Spacer()
                         
                         Button(action: nextMonth) {
@@ -211,11 +150,53 @@ struct CalendarView: View {
         }
     }
     
-    private func addEvent(title: String, description: String, start: Date, end: Date) {
-        let newEvent = CalendarEvent(title: title, description: description, startDate: start, endDate: end)
-        events.append(newEvent)
-        saveEvents()
+    func addEvent(
+    title: String,
+    description: String,
+    date: Date,
+    time: String,
+    type: String,
+    courseName: String,
+    groupMembers: [String]? = nil,
+    completedStudying: Bool = false
+) {
+    var newEvent: CalendarEventItem
+
+    switch type.lowercased() {
+    case "test":
+        newEvent = TestEvent(
+            title: title,
+            description: description,
+            date: date,
+            time: time,
+            courseName: courseName,
+            completedStudying: completedStudying
+        )
+    case "assignment":
+        newEvent = AssignmentEvent(
+            title: title,
+            description: description,
+            date: date,
+            time: time,
+            courseName: courseName,
+            groupMembers: groupMembers
+        )
+    default:
+        newEvent = CanvasEvent(
+            title: title,
+            description: description,
+            date: date,
+            time: time,
+            courseName: courseName
+        )
     }
+
+    DispatchQueue.main.async {
+        self.events.append(newEvent)
+        self.events.sort { $0.date < $1.date }
+    }
+}
+
     private func saveEvents() {
         if let encoded = try? JSONEncoder().encode(events) {
             UserDefaults.standard.set(encoded, forKey: "localEvents")

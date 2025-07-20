@@ -8,17 +8,6 @@
 import Foundation
 import SwiftUI
 
-struct CanvasAssignment: Identifiable {
-    let id: String
-    let title: String
-    let dueAt: Date?
-    let type: ItemType
-
-    enum ItemType {
-        case assignment
-        case quiz
-    }
-}
 
 @MainActor
 class CanvasViewModel: ObservableObject {
@@ -30,12 +19,7 @@ class CanvasViewModel: ObservableObject {
     private let redirectURI = "myapp://oauth-callback" // needs to be changed
     private let canvasDomain = "https://canvas.instructure.com"
 
-    func checkLoginStatus() {
-        isLoggedIn = UserDefaults.standard.string(forKey: "canvasAccessToken") != nil
-        if isLoggedIn {
-            fetchPlannerItems()
-        }
-    }
+    
 
     func startOAuthFlow() {
         guard let url = URL(string: "\(canvasDomain)/login/oauth2/auth?client_id=\(clientID)&response_type=code&redirect_uri=\(redirectURI)") else { return }
@@ -67,44 +51,6 @@ class CanvasViewModel: ObservableObject {
             DispatchQueue.main.async {
                 self.isLoggedIn = true
                 self.fetchPlannerItems()
-            }
-        }.resume()
-    }
-
-    func fetchPlannerItems() {
-        guard let token = UserDefaults.standard.string(forKey: "canvasAccessToken"),
-              let url = URL(string: "\(canvasDomain)/api/v1/planner/items?start_date=\(ISO8601DateFormatter().string(from: Date()))") else { return }
-
-        isLoading = true
-
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
-        URLSession.shared.dataTask(with: request) { data, _, _ in
-            defer { Task { @MainActor in self.isLoading = false } }
-
-            guard let data = data,
-                  let rawItems = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return }
-
-            let formatter = ISO8601DateFormatter()
-
-            let parsedAssignments = rawItems.compactMap { item -> CanvasAssignment? in
-                guard let id = item["plannable_id"] as? Int,
-                      let plannable = item["plannable"] as? [String: Any],
-                      let title = plannable["title"] as? String else { return nil }
-
-                let dueAt: Date? = {
-                    if let dueString = plannable["due_at"] as? String {
-                        return formatter.date(from: dueString)
-                    }
-                    return nil
-                }()
-
-                return CanvasAssignment(id: String(id), title: title, dueAt: dueAt)
-            }
-
-            DispatchQueue.main.async {
-                self.assignments = parsedAssignments
             }
         }.resume()
     }

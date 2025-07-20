@@ -1,0 +1,226 @@
+// CalendarBackground.swift
+// StudyMaster
+//
+// Created by Dakota Chou on 7/20/2025
+//
+
+import SwiftUI
+
+/*
+Breakdown for structure of event storage
+    Month
+        Assignments (Title, Class object, description, due date, time, group members)
+        Tests (Title, Class object, date, time)
+        Manual/study event (Title, date, time, description)
+
+assignments and tests will be pulled from canvas,
+manual event will be created by user, study event created by app
+Event class structure:
+    Title, description, date, time
+
+    Canvas event subclass: (Tests will use this)
+        Class object
+
+        Assignment subclass:
+            group members
+            
+
+ */
+
+
+class Event {
+    var title: String
+    var description: String
+    var date: Date
+    var time: Date
+
+    init(title: String, description: String, date: Date, time: Date) {
+        self.title = title
+        self.description = description
+        self.date = date
+        self.time = time
+    }
+}
+
+class CanvasEvent: Event {
+    var courseName: String  // Represents the class object
+
+    init(title: String, description: String, date: Date, time: Date, courseName: String) {
+        self.courseName = courseName
+        super.init(title: title, description: description, date: date, time: time)
+    }
+}
+
+class Assignment: CanvasEvent {
+    var groupMembers: [String]
+
+    init(title: String,
+         description: String,
+         date: Date,
+         time: Date,
+         courseName: String,
+         groupMembers: [String]) {
+        self.groupMembers = groupMembers
+        super.init(title: title, description: description, date: date, time: time, courseName: courseName)
+    }
+}
+
+class TestEvent: CanvasEvent {
+    var completedStudying: Bool
+
+    init(title: String, description: String, date: Date, time: String, courseName: String, completedStudying: Bool = false) {
+        self.completedStudying = completedStudying
+        super.init(title: title, description: description, date: date, time: time, courseName: courseName)
+    }
+}
+
+class CanvasViewModel: ObservableObject {
+    @Published var events: [Event] = []
+    private var token: String = ""
+    private var canvasDomain: String = ""
+
+    func initialize(token: String, canvasDomain: String) {
+        self.token = token
+        self.canvasDomain = canvasDomain
+        func checkLoginStatus() {
+        isLoggedIn = UserDefaults.standard.string(forKey: "canvasAccessToken") != nil
+            if isLoggedIn {
+                fetchCalendarEvents()
+                fetchQuizzes()
+            }
+        }
+    }
+
+    func fetchCalendarEvents() {
+        guard let url = URL(string: "\(canvasDomain)/api/v1/planner/items?per_page=50") else { return }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        URLSession.shared.dataTask(with: request) { data, _, error in
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                print("Failed to fetch planner items")
+                return
+            }
+
+            var newEvents: [Event] = []
+
+            for item in json {
+                guard let title = item["title"] as? String,
+                      let dateStr = item["plannable_date"] as? String,
+                      let date = formatter.date(from: dateStr),
+                      let plannable = item["plannable"] as? [String: Any],
+                      let type = item["plannable_type"] as? String else { continue }
+
+                let time = DateFormatter.localizedString(from: date, dateStyle: .none, timeStyle: .short)
+                let courseName = item["course_name"] as? String ?? "Unknown"
+
+                if type == "assignment" {
+                    let group = plannable["group"] as? [String: Any]
+                    let groupMembers = group?["members"] as? [String]
+                    newEvents.append(
+                        AssignmentEvent(
+                            title: title,
+                            description: plannable["description"] as? String ?? "",
+                            date: date,
+                            time: time,
+                            courseName: courseName,
+                            groupMembers: groupMembers
+                        )
+                    )
+                } else if type == "quiz" {
+                    newEvents.append(
+                        TestEvent(
+                            title: title,
+                            description: plannable["description"] as? String ?? "",
+                            date: date,
+                            time: time,
+                            courseName: courseName,
+                            completedStudying: false
+                        )
+                    )
+                } else {
+                    newEvents.append(
+                        CanvasEvent(
+                            title: title,
+                            description: plannable["description"] as? String ?? "",
+                            date: date,
+                            time: time,
+                            courseName: courseName
+                        )
+                    )
+                }
+            }
+
+            DispatchQueue.main.async {
+                self.events.append(contentsOf: newEvents)
+                self.events.sort { $0.date < $1.date }
+            }
+        }.resume()
+    }
+
+    func fetchQuizzes() {
+        guard let coursesURL = URL(string: "\(canvasDomain)/api/v1/courses") else { return }
+
+        var courseRequest = URLRequest(url: coursesURL)
+        courseRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        URLSession.shared.dataTask(with: courseRequest) { data, _, _ in
+            guard let data = data,
+                  let courses = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                print("Failed to fetch courses")
+                return
+            }
+
+            let group = DispatchGroup()
+            var fetchedTests: [TestEvent] = []
+
+            for course in courses {
+                guard let courseId = course["id"] as? Int,
+                      let courseName = course["name"] as? String else { continue }
+
+                group.enter()
+
+                let quizzesURL = URL(string: "\(self.canvasDomain)/api/v1/courses/\(courseId)/quizzes")!
+                var quizRequest = URLRequest(url: quizzesURL)
+                quizRequest.setValue("Bearer \(self.token)", forHTTPHeaderField: "Authorization")
+
+                URLSession.shared.dataTask(with: quizRequest) { data, _, _ in
+                    defer { group.leave() }
+
+                    guard let data = data,
+                          let quizzes = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                        print("Failed to fetch quizzes for course \(courseId)")
+                        return
+                    }
+
+                    for quiz in quizzes {
+                        guard let title = quiz["title"] as? String,
+                              let dueAt = quiz["due_at"] as? String,
+                              let date = formatter.date(from: dueAt) else { continue }
+
+                        let time = DateFormatter.localizedString(from: date, dateStyle: .none, timeStyle: .short)
+                        let description = quiz["description"] as? String ?? ""
+
+                        let test = TestEvent(
+                            title: title,
+                            description: description,
+                            date: date,
+                            time: time,
+                            courseName: courseName,
+                            completedStudying: false
+                        )
+                        fetchedTests.append(test)
+                    }
+                }.resume()
+            }
+
+            group.notify(queue: .main) {
+                self.events.append(contentsOf: fetchedTests)
+                self.events.sort { $0.date < $1.date }
+            }
+
+        }.resume()
+    }
+}
