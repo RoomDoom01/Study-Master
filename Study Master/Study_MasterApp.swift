@@ -15,3 +15,4 @@ struct Study_MasterApp: App {
         }
     }
 }
+
