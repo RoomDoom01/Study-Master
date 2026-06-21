@@ -1,5 +1,7 @@
 # Study-Master
 
+# Repository archived due to business team not being able to secure IOS development liscence :(
+
 ##Current functionality list:
 -3 tab setup with left and right tabs being placeholder windows right now
 -main calendar screen with buttons to change the months and dynamic spacing
